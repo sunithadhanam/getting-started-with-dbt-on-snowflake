@@ -222,3 +222,35 @@ FROM @tasty_bytes_dbt_db.public.s3load/raw_pos/order_detail/;
 
 -- setup completion note
 SELECT 'tasty_bytes_dbt_db setup is now complete' AS note;
+
+
+ALTER SCHEMA tasty_bytes_dbt_db.dev SET LOG_LEVEL = 'INFO';
+ALTER SCHEMA tasty_bytes_dbt_db.dev SET TRACE_LEVEL = 'ALWAYS';
+ALTER SCHEMA tasty_bytes_dbt_db.dev SET METRIC_LEVEL = 'ALL';
+
+
+-- 1️⃣ Drop old rules and integrations if they exist
+DROP NETWORK RULE IF EXISTS DBT_GITHUB_RULE;
+DROP EXTERNAL ACCESS INTEGRATION IF EXISTS DBT_ACCESS_INTEGRATION;
+
+-- 2️⃣ Create a new rule with ALL required hosts
+CREATE OR REPLACE NETWORK RULE DBT_GITHUB_RULE
+  MODE = EGRESS
+  TYPE = HOST_PORT
+  VALUE_LIST = ('hub.getdbt.com', 'github.com', 'codeload.github.com');
+
+-- 3️⃣ Create integration that uses this rule
+CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION DBT_ACCESS_INTEGRATION
+  ALLOWED_NETWORK_RULES = (DBT_GITHUB_RULE)
+  ENABLED = TRUE;
+
+-- 4️⃣ Grant usage permission
+GRANT USAGE ON INTEGRATION DBT_ACCESS_INTEGRATION TO ROLE ACCOUNTADMIN;
+
+-- 5️⃣ Re-run the dbt deps command
+EXECUTE DBT PROJECT FROM WORKSPACE "USER$"."PUBLIC"."getting-started-with-dbt-on-snowflake"
+  PROJECT_ROOT = '/tasty_bytes_dbt_demo'
+  ARGS = 'deps --target dev'
+  EXTERNAL_ACCESS_INTEGRATIONS = (DBT_ACCESS_INTEGRATION);
+
+
